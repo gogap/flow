@@ -47,6 +47,20 @@ flow1ConfigStr := `
 
 #### Create flow
 
+import flow and handlers
+
+```go
+import (
+	"fmt"
+	"github.com/gogap/flow"
+
+	_ "github.com/gogap/flow-contrib/handler/anko"
+	_ "github.com/gogap/flow-contrib/handler/goja"
+	_ "github.com/gogap/flow-contrib/handler/otto"
+)
+```
+
+
 ```go
 var f *flow.Flow
 	f, err = flow.NewFlow("flow1",
