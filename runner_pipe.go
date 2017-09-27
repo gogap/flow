@@ -82,8 +82,13 @@ func (p *PipeTaskRunner) getHandler(step *Step) (handler Handler, err error) {
 
 	conf := config.NewConfig()
 
-	conf.WithFallback(p.conf.GetConfig(step.Handler())).
-		WithFallback(step.conf)
+	if p.conf != nil {
+		conf.WithFallback(p.conf.GetConfig(step.Handler()))
+	}
+
+	if step.conf != nil {
+		conf.WithFallback(step.conf)
+	}
 
 	singleton := conf.GetBoolean("singleton", true)
 
