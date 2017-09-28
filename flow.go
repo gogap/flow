@@ -35,6 +35,15 @@ func ConfigString(str string) FlowOption {
 	}
 }
 
+func Config(conf config.Configuration) FlowOption {
+	return func(f *Flow) error {
+		if conf != nil {
+			f.conf.WithFallback(conf)
+		}
+		return nil
+	}
+}
+
 func NewFlow(name string, opts ...FlowOption) (f *Flow, err error) {
 	flo := &Flow{
 		name: name,
