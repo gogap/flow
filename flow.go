@@ -1,113 +1,146 @@
 package flow
 
 import (
-	"github.com/gogap/config"
+	"fmt"
+	"sync"
+
+	"github.com/gogap/context"
 )
 
-type FlowOption func(*Flow) error
+var (
+	defaultFlow = New()
+)
 
 type Flow struct {
-	name string
+	handlers              map[string]HandlerFunc
+	registerdHandlerNames []string
 
-	steps []Step
-
-	runner      TaskRunner
-	ctxProvider ContextProvider
-
-	conf         config.Configuration
-	configFile   string
-	configString string
+	lock sync.RWMutex
 }
 
-func ConfigFile(filename string) FlowOption {
-	return func(f *Flow) error {
-		conf := config.NewConfig(config.ConfigFile(filename))
-		f.conf.WithFallback(conf)
-		return nil
-	}
+type FlowTrans struct {
+	flow *Flow
+	h    HandlerFunc
+	opts []Option
+	err  error
 }
 
-func ConfigString(str string) FlowOption {
-	return func(f *Flow) error {
-		conf := config.NewConfig(config.ConfigString(str))
-		f.conf.WithFallback(conf)
-		return nil
+func New() *Flow {
+	return &Flow{
+		handlers: make(map[string]HandlerFunc),
 	}
 }
 
-func Config(conf config.Configuration) FlowOption {
-	return func(f *Flow) error {
-		if conf != nil {
-			f.conf.WithFallback(conf)
-		}
-		return nil
-	}
-}
+func (p *Flow) RegisterHandler(name string, handler HandlerFunc) (err error) {
 
-func NewFlow(name string, opts ...FlowOption) (f *Flow, err error) {
-	flo := &Flow{
-		name: name,
-		conf: config.NewConfig(),
-	}
-
-	for i := 0; i < len(opts); i++ {
-		err = opts[i](flo)
-		if err != nil {
-			return
-		}
-	}
-
-	ctxConf := flo.conf.GetConfig("context")
-	runnerConf := flo.conf.GetConfig("runner")
-
-	ctxProvider := ctxConf.GetString("provider", "LocalContextProvider")
-	runnerType := runnerConf.GetString("type", "PipeTaskRunner")
-
-	provider, err := NewContextProvider(ctxProvider, ctxConf.GetConfig("options"))
-	if err != nil {
+	if len(name) == 0 {
+		err = fmt.Errorf("handler name is emtpy")
 		return
 	}
 
-	runner, err := NewRunner(runnerType, runnerConf.GetConfig("options"))
-	if err != nil {
+	if handler == nil {
+		err = fmt.Errorf("handler func could not be nil")
 		return
 	}
 
-	stepsConf := flo.conf.GetConfig("steps")
+	p.lock.Lock()
+	defer p.lock.Unlock()
 
-	orderList := stepsConf.GetStringList("order")
-
-	for i := 0; i < len(orderList); i++ {
-		stepConf := stepsConf.GetConfig(orderList[i])
-		step := NewStep(
-			name,
-			orderList[i],
-			stepConf.GetString("handler"),
-			stepConf.GetConfig("options"),
-		)
-
-		flo.steps = append(flo.steps, step)
+	_, exist := p.handlers[name]
+	if exist {
+		err = fmt.Errorf("handler %s already registered", name)
+		return
 	}
 
-	flo.runner = runner
-	flo.ctxProvider = provider
-
-	f = flo
+	p.handlers[name] = handler
+	p.registerdHandlerNames = append(p.registerdHandlerNames, name)
 
 	return
 }
 
-func (p *Flow) Setup(steps []Step) *Flow {
+func (p *Flow) ListHandlers() []string {
+	return p.registerdHandlerNames
+}
 
-	p.steps = append(p.steps, steps...)
+func (p *Flow) Begin() *FlowTrans {
+	return &FlowTrans{flow: p}
+}
+
+func (p *Flow) Run(name string, ctx context.Context, opts ...Option) (err error) {
+
+	p.lock.RLock()
+	h, exist := p.handlers[name]
+	p.lock.RUnlock()
+
+	if !exist {
+		err = fmt.Errorf("handler %s not exist", name)
+		return
+	}
+
+	err = h.Run(ctx, opts...)
+
+	return
+}
+
+func RegisterHandler(name string, handler HandlerFunc) (err error) {
+	return defaultFlow.RegisterHandler(name, handler)
+}
+
+func ListHandlers() []string {
+	return defaultFlow.ListHandlers()
+}
+
+func Begin() *FlowTrans {
+	return &FlowTrans{flow: defaultFlow}
+}
+
+func Run(name string, ctx context.Context, opts ...Option) (err error) {
+	return defaultFlow.Run(name, ctx, opts...)
+}
+
+func (p *FlowTrans) Then(name string, opts ...Option) *FlowTrans {
+
+	if p.err != nil {
+		return p
+	}
+
+	h, exist := p.flow.handlers[name]
+
+	if !exist {
+		p.err = fmt.Errorf("handler %s not exist", name)
+		return p
+	}
+
+	if p.h == nil {
+		p.h = h
+		p.opts = opts
+		return p
+	}
+
+	p.h = p.h.Then(h, opts...)
 
 	return p
 }
 
-func (p *Flow) Name() string {
-	return p.name
+func (p *FlowTrans) Subscribe(subscribers ...SubscriberFunc) *FlowTrans {
+
+	if p.err != nil {
+		return p
+	}
+
+	if p.h == nil {
+		return p
+	}
+
+	p.h = p.h.Subscribe(subscribers...)
+
+	return p
 }
 
-func (p *Flow) NewTask() *Task {
-	return NewTask(p, p.ctxProvider.NewContext(p.conf))
+func (p *FlowTrans) Commit() error {
+	if p.err != nil {
+		return p.err
+	}
+
+	return p.h.Run(context.NewContext(), p.opts...)
 }
