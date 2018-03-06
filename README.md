@@ -1,6 +1,7 @@
 Flow
 ====
 
+#### usage demo
 
 ```go
 package main
@@ -112,7 +113,7 @@ H2 {
 subscribed
 ```
 
-
+#### handler options demo
 
 ```go
 package main
@@ -163,7 +164,7 @@ H2 {
 ```
 
 
-create aliyun vpc
+#### create aliyun vpc
 
 ```go
 package main
@@ -222,4 +223,44 @@ func main() {
 	}
 
 }
+```
+
+#### execute js
+
+```go
+package main
+
+import (
+	"fmt"
+
+	"github.com/gogap/flow"
+
+	_ "github.com/gogap/flow-contrib/handler/lang/javascript/goja"
+)
+
+var confStr = `
+src = test.js
+`
+
+func main() {
+
+	var err error
+
+	defer func() { fmt.Println(err) }()
+
+	err = flow.Begin().
+		WithOptions(flow.ConfigString(confStr)).
+		Then("lang.javascript.goja").
+		Commit()
+
+	if err != nil {
+		return
+	}
+}
+```
+
+`test.js`
+
+```javascript
+console.log("I am from goja")
 ```
