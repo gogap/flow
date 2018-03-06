@@ -3,13 +3,15 @@ package flow
 import (
 	"github.com/gogap/config"
 	"github.com/gogap/context"
+	"github.com/gogap/flow/cache"
 )
 
 type Options struct {
 	Config config.Configuration
+	Cache  cache.Cache
 }
 
-func NewOptions(opts ...Option) *Options {
+func ParseOptions(opts ...Option) *Options {
 	o := &Options{}
 	o.Init(opts...)
 	return o
@@ -35,6 +37,12 @@ func ConfigFile(filename string) Option {
 	return func(o *Options) {
 		conf := config.NewConfig(config.ConfigFile(filename))
 		o.Config = conf
+	}
+}
+
+func Cache(cache cache.Cache) Option {
+	return func(o *Options) {
+		o.Cache = cache
 	}
 }
 

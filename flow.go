@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/gogap/context"
+	"github.com/gogap/flow/cache"
 )
 
 var (
@@ -12,6 +13,7 @@ var (
 )
 
 type Flow struct {
+	cache                 cache.Cache
 	handlers              map[string]HandlerFunc
 	registerdHandlerNames []string
 
@@ -19,16 +21,23 @@ type Flow struct {
 }
 
 type FlowTrans struct {
-	flow *Flow
-	h    HandlerFunc
-	opts []Option
-	err  error
+	flow        *Flow
+	ctx         context.Context
+	firstFn     HandlerFunc
+	firstOpts   []Option
+	defaultOpts []Option
+	err         error
 }
 
 func New() *Flow {
 	return &Flow{
 		handlers: make(map[string]HandlerFunc),
 	}
+}
+
+func (p *Flow) WithCache(cache cache.Cache) *Flow {
+	p.cache = cache
+	return p
 }
 
 func (p *Flow) RegisterHandler(name string, handler HandlerFunc) (err error) {
@@ -90,12 +99,35 @@ func ListHandlers() []string {
 	return defaultFlow.ListHandlers()
 }
 
-func Begin() *FlowTrans {
-	return &FlowTrans{flow: defaultFlow}
+func WithCache(cache cache.Cache) *Flow {
+	return defaultFlow.WithCache(cache)
 }
 
 func Run(name string, ctx context.Context, opts ...Option) (err error) {
 	return defaultFlow.Run(name, ctx, opts...)
+}
+
+func Begin() *FlowTrans {
+	return &FlowTrans{flow: defaultFlow}
+}
+
+func (p *FlowTrans) WithContext(ctx context.Context) *FlowTrans {
+	if p.ctx != nil {
+		panic("WithContext only could be call once.")
+	}
+	p.ctx = ctx
+	return p
+}
+
+func (p *FlowTrans) WithOptions(opts ...Option) *FlowTrans {
+
+	runOpts := ParseOptions(opts...)
+	if runOpts.Cache == nil && p.flow.cache != nil {
+		opts = append(opts, Cache(p.flow.cache))
+	}
+
+	p.defaultOpts = opts
+	return p
 }
 
 func (p *FlowTrans) Then(name string, opts ...Option) *FlowTrans {
@@ -111,13 +143,17 @@ func (p *FlowTrans) Then(name string, opts ...Option) *FlowTrans {
 		return p
 	}
 
-	if p.h == nil {
-		p.h = h
-		p.opts = opts
+	if len(opts) == 0 {
+		opts = p.defaultOpts
+	}
+
+	if p.firstFn == nil {
+		p.firstFn = h
+		p.firstOpts = opts
 		return p
 	}
 
-	p.h = p.h.Then(h, opts...)
+	p.firstFn = p.firstFn.Then(h, opts...)
 
 	return p
 }
@@ -128,11 +164,11 @@ func (p *FlowTrans) Subscribe(subscribers ...SubscriberFunc) *FlowTrans {
 		return p
 	}
 
-	if p.h == nil {
+	if p.firstFn == nil {
 		return p
 	}
 
-	p.h = p.h.Subscribe(subscribers...)
+	p.firstFn = p.firstFn.Subscribe(subscribers...)
 
 	return p
 }
@@ -142,5 +178,12 @@ func (p *FlowTrans) Commit() error {
 		return p.err
 	}
 
-	return p.h.Run(context.NewContext(), p.opts...)
+	var ctx context.Context
+	if p.ctx == nil {
+		ctx = context.NewContext()
+	} else {
+		ctx = p.ctx
+	}
+
+	return p.firstFn.Run(ctx, p.firstOpts...)
 }

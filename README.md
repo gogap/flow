@@ -68,7 +68,7 @@ func main() {
 
 	h1 := func(ctx context.Context, opts ...flow.Option) (err error) {
 
-		flowOpts := flow.NewOptions(opts...)
+		flowOpts := flow.ParseOptions(opts...)
 
 		fmt.Println("H1", flowOpts.Config)
 
@@ -77,7 +77,7 @@ func main() {
 
 	h2 := func(ctx context.Context, opts ...flow.Option) (err error) {
 
-		flowOpts := flow.NewOptions(opts...)
+		flowOpts := flow.ParseOptions(opts...)
 
 		fmt.Println("H2", flowOpts.Config)
 
@@ -98,7 +98,6 @@ func main() {
 	// delay exist console
 	time.Sleep(time.Second)
 }
-
 ```
 
 **output**
@@ -129,7 +128,7 @@ func main() {
 
 	var h1 flow.HandlerFunc = func(ctx context.Context, opts ...flow.Option) (err error) {
 
-		flowOpts := flow.NewOptions(opts...)
+		flowOpts := flow.ParseOptions(opts...)
 
 		fmt.Println("H1", flowOpts.Config)
 
@@ -138,7 +137,7 @@ func main() {
 
 	var h2 flow.HandlerFunc = func(ctx context.Context, opts ...flow.Option) (err error) {
 
-		flowOpts := flow.NewOptions(opts...)
+		flowOpts := flow.ParseOptions(opts...)
 
 		fmt.Println("H2", flowOpts.Config)
 
@@ -160,5 +159,67 @@ H1 {
 }
 H2 {
   config : h2
+}
+```
+
+
+create aliyun vpc
+
+```go
+package main
+
+import (
+	"fmt"
+
+	"github.com/gogap/context"
+	"github.com/gogap/flow"
+	"github.com/gogap/flow/cache"
+
+	_ "github.com/gogap/flow-contrib/handler/devops/aliyun"
+	_ "github.com/gogap/flow/cache/redis"
+)
+
+var confStr = `
+aliyun {
+	region = cn-beijing
+	access-key-id = 
+	access-key-secret =
+
+	vpc  {
+		test {
+			cidr-block  = "172.16.0.0/16"
+			description = "172.16.0.0/16"
+		}
+	}
+}
+`
+
+func main() {
+
+	var err error
+
+	defer func() { fmt.Println(err) }()
+
+	redisCache, err := cache.NewCache("go-redis")
+	if err != nil {
+		return
+	}
+
+	flow.WithCache(redisCache)
+
+	ctx := context.NewContext()
+
+	ctx.WithValue("CODE", "test")
+
+	err = flow.Begin().
+		WithContext(ctx).
+		WithOptions(flow.ConfigString(confStr)).
+		Then("devops.aliyun.vpc").
+		Commit()
+
+	if err != nil {
+		return
+	}
+
 }
 ```
