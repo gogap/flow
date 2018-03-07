@@ -6,77 +6,51 @@ import (
 	"github.com/gogap/flow/cache"
 )
 
-type Options struct {
-	Config config.Configuration
-	Cache  cache.Cache
+type ctxConfigKey struct {
+	Name string
 }
 
-func ParseOptions(opts ...Option) *Options {
-	o := &Options{}
-	o.Init(opts...)
-	return o
+type ctxCacheKey struct {
+	Name string
 }
 
-func (p *Options) Init(opts ...Option) *Options {
-	for _, o := range opts {
-		o(p)
-	}
-	return p
+func ValueConfig(ctx context.Context, name string) config.Configuration {
+	conf, _ := ctx.Value(ctxConfigKey{name}).(config.Configuration)
+	return conf
 }
 
-type Option func(*Options)
-
-func ConfigString(str string) Option {
-	return func(o *Options) {
-		conf := config.NewConfig(config.ConfigString(str))
-		o.Config = conf
-	}
+func ValueCache(ctx context.Context) cache.Cache {
+	c, _ := ctx.Value(ctxCacheKey{}).(cache.Cache)
+	return c
 }
 
-func ConfigFile(filename string) Option {
-	return func(o *Options) {
-		conf := config.NewConfig(config.ConfigFile(filename))
-		o.Config = conf
-	}
+func ConfigString(str string) config.Option {
+	return config.ConfigString(str)
 }
 
-func Cache(cache cache.Cache) Option {
-	return func(o *Options) {
-		o.Cache = cache
-	}
+func ConfigFile(filename string) config.Option {
+	return config.ConfigFile(filename)
 }
 
-type ctxOptionsKey struct {
+type SubscriberFunc func(context.Context)
+
+type HandlerFunc func(context.Context) error
+
+func (p HandlerFunc) Run(ctx context.Context) error {
+	return p(ctx)
 }
 
-type SubscriberFunc func(context.Context, ...Option)
+func (p HandlerFunc) Then(next HandlerFunc) HandlerFunc {
 
-type HandlerFunc func(context.Context, ...Option) error
+	var h HandlerFunc = func(ctx context.Context) (err error) {
 
-func (p HandlerFunc) Run(ctx context.Context, opts ...Option) error {
-
-	ctx.WithValue(ctxOptionsKey{}, opts)
-
-	return p(ctx, opts...)
-}
-
-func (p HandlerFunc) Then(next HandlerFunc, opts ...Option) HandlerFunc {
-
-	nextOpts := opts
-
-	var h HandlerFunc = func(ctx context.Context, opts ...Option) (err error) {
-
-		err = p.Run(ctx, opts...)
+		err = p.Run(ctx)
 
 		if err != nil {
 			return
 		}
 
-		if len(nextOpts) == 0 {
-			err = next.Run(ctx, opts...)
-		} else {
-			err = next.Run(ctx, nextOpts...)
-		}
+		err = next.Run(ctx)
 
 		if err != nil {
 			return
@@ -89,8 +63,8 @@ func (p HandlerFunc) Then(next HandlerFunc, opts ...Option) HandlerFunc {
 }
 
 func (p HandlerFunc) Subscribe(subscribers ...SubscriberFunc) HandlerFunc {
-	var h HandlerFunc = func(ctx context.Context, opts ...Option) (err error) {
-		err = p.Run(ctx, opts...)
+	var h HandlerFunc = func(ctx context.Context) (err error) {
+		err = p.Run(ctx)
 
 		if len(subscribers) > 0 {
 			var newCtx context.Context
@@ -104,7 +78,7 @@ func (p HandlerFunc) Subscribe(subscribers ...SubscriberFunc) HandlerFunc {
 				newCtx.WithError(err)
 			}
 
-			p.publish(newCtx, opts, subscribers...)
+			p.publish(newCtx, subscribers...)
 		}
 
 		return
@@ -113,16 +87,16 @@ func (p HandlerFunc) Subscribe(subscribers ...SubscriberFunc) HandlerFunc {
 	return h
 }
 
-func (p HandlerFunc) publish(ctx context.Context, opts []Option, subscribers ...SubscriberFunc) {
+func (p HandlerFunc) publish(ctx context.Context, subscribers ...SubscriberFunc) {
 
 	if len(subscribers) == 0 {
 		return
 	}
 
-	go func(ctx context.Context, opts []Option, subscribers ...SubscriberFunc) {
+	go func(ctx context.Context, subscribers ...SubscriberFunc) {
 
 		for _, s := range subscribers {
-			s(ctx, opts...)
+			s(ctx)
 		}
-	}(ctx, opts, subscribers...)
+	}(ctx, subscribers...)
 }

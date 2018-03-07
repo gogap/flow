@@ -14,22 +14,24 @@ import (
 	"github.com/gogap/flow"
 )
 
+type ctxKey struct{ Key string }
+
 func main() {
 
-	h1 := func(ctx context.Context, opts ...flow.Option) (err error) {
+	h1 := func(ctx context.Context) (err error) {
 
-		flowOpts := flow.NewOptions(opts...)
+		v := flow.ValueConfig(ctx, "h1")
 
-		fmt.Println("H1", flowOpts.Config)
+		fmt.Println("H1", v)
 
 		return
 	}
 
-	h2 := func(ctx context.Context, opts ...flow.Option) (err error) {
+	h2 := func(ctx context.Context) (err error) {
 
-		flowOpts := flow.NewOptions(opts...)
+		v := flow.ValueConfig(ctx, "h2")
 
-		fmt.Println("H2", flowOpts.Config)
+		fmt.Println("H2", v)
 
 		return
 	}
@@ -37,17 +39,22 @@ func main() {
 	flow.RegisterHandler("h1", h1)
 	flow.RegisterHandler("h2", h2)
 
-	flow.Begin().
-		Then("h1", flow.ConfigString(`{a = 1}`)).
-		Then("h2", flow.ConfigString(`{a = 2}`)).
+	ctx := context.NewContext()
+
+	flow.Begin(ctx).
+		WithConfig("h1", flow.ConfigString(`{config = h2}`)).
+		WithConfig("h2", flow.ConfigString(`{config = h2}`)).
+		Then("h1").
+		Then("h2").
 		Subscribe(
-			func(ctx context.Context, opts ...flow.Option) {
+			func(ctx context.Context) {
 				fmt.Println("subscribed")
 			}).Commit()
 
 	// delay exist console
 	time.Sleep(time.Second)
 }
+
 ```
 
 or
@@ -63,24 +70,26 @@ import (
 	"github.com/gogap/flow"
 )
 
+type ctxKey struct{ Key string }
+
 func main() {
 
 	myFlow := flow.New()
 
-	h1 := func(ctx context.Context, opts ...flow.Option) (err error) {
+	h1 := func(ctx context.Context) (err error) {
 
-		flowOpts := flow.ParseOptions(opts...)
+		v := flow.ValueConfig(ctx, "h1")
 
-		fmt.Println("H1", flowOpts.Config)
+		fmt.Println("H1", v)
 
 		return
 	}
 
-	h2 := func(ctx context.Context, opts ...flow.Option) (err error) {
+	h2 := func(ctx context.Context) (err error) {
 
-		flowOpts := flow.ParseOptions(opts...)
+		v := flow.ValueConfig(ctx, "h2")
 
-		fmt.Println("H2", flowOpts.Config)
+		fmt.Println("H2", v)
 
 		return
 	}
@@ -88,17 +97,22 @@ func main() {
 	myFlow.RegisterHandler("h1", h1)
 	myFlow.RegisterHandler("h2", h2)
 
-	myFlow.Begin().
-		Then("h1", flow.ConfigString(`{a = 1}`)).
-		Then("h2", flow.ConfigString(`{a = 2}`)).
+	ctx := context.NewContext()
+
+	myFlow.Begin(ctx).
+		WithConfig("h1", flow.ConfigString(`{config = h2}`)).
+		WithConfig("h2", flow.ConfigString(`{config = h2}`)).
+		Then("h1").
+		Then("h2").
 		Subscribe(
-			func(ctx context.Context, opts ...flow.Option) {
+			func(ctx context.Context) {
 				fmt.Println("subscribed")
 			}).Commit()
 
 	// delay exist console
 	time.Sleep(time.Second)
 }
+
 ```
 
 **output**
@@ -121,34 +135,42 @@ package main
 import (
 	"fmt"
 
+	"github.com/gogap/config"
 	"github.com/gogap/context"
 	"github.com/gogap/flow"
 )
 
+type ctxKey struct{ Key string }
+
 func main() {
 
-	var h1 flow.HandlerFunc = func(ctx context.Context, opts ...flow.Option) (err error) {
+	var h1 flow.HandlerFunc = func(ctx context.Context) (err error) {
 
-		flowOpts := flow.ParseOptions(opts...)
+		v := ctx.Value(ctxKey{"H1"}).(config.Configuration)
 
-		fmt.Println("H1", flowOpts.Config)
-
-		return
-	}
-
-	var h2 flow.HandlerFunc = func(ctx context.Context, opts ...flow.Option) (err error) {
-
-		flowOpts := flow.ParseOptions(opts...)
-
-		fmt.Println("H2", flowOpts.Config)
+		fmt.Println("H1", v)
 
 		return
 	}
 
-	h := h1.Then(h2, flow.ConfigString(`{config = h2}`))
+	var h2 flow.HandlerFunc = func(ctx context.Context) (err error) {
 
-	h(context.NewContext(), flow.ConfigString(`{config = 1}`))
+		v := ctx.Value(ctxKey{"H2"}).(config.Configuration)
+
+		fmt.Println("H2", v)
+
+		return
+	}
+
+	ctx := context.NewContext()
+	ctx.WithValue(ctxKey{"H1"}, config.NewConfig(flow.ConfigString(`{config = h1}`)))
+	ctx.WithValue(ctxKey{"H2"}, config.NewConfig(flow.ConfigString(`{config = h2}`)))
+
+	h := h1.Then(h2)
+
+	h(ctx)
 }
+
 ```
 
 
@@ -156,7 +178,7 @@ func main() {
 
 ```bash
 H1 {
-  config : 1
+  config : h1
 }
 H2 {
   config : h2
@@ -174,7 +196,6 @@ import (
 
 	"github.com/gogap/context"
 	"github.com/gogap/flow"
-	"github.com/gogap/flow/cache"
 
 	_ "github.com/gogap/flow-contrib/handler/devops/aliyun"
 	_ "github.com/gogap/flow/cache/redis"
@@ -183,8 +204,8 @@ import (
 var confStr = `
 aliyun {
 	region = cn-beijing
-	access-key-id = 
-	access-key-secret =
+	access-key-id = ""
+	access-key-secret = ""
 
 	vpc  {
 		test {
@@ -201,28 +222,21 @@ func main() {
 
 	defer func() { fmt.Println(err) }()
 
-	redisCache, err := cache.NewCache("go-redis")
-	if err != nil {
-		return
-	}
-
-	flow.WithCache(redisCache)
-
 	ctx := context.NewContext()
 
 	ctx.WithValue("CODE", "test")
 
-	err = flow.Begin().
-		WithContext(ctx).
-		WithOptions(flow.ConfigString(confStr)).
-		Then("devops.aliyun.vpc").
+	err = flow.Begin(ctx).
+		WithCache("go-redis").
+		WithConfig("devops.aliyun", flow.ConfigString(confStr)).
+		Then("devops.aliyun.vpc.create").
 		Commit()
 
 	if err != nil {
 		return
 	}
-
 }
+
 ```
 
 #### execute js
@@ -233,6 +247,7 @@ package main
 import (
 	"fmt"
 
+	"github.com/gogap/context"
 	"github.com/gogap/flow"
 
 	_ "github.com/gogap/flow-contrib/handler/lang/javascript/goja"
@@ -248,8 +263,8 @@ func main() {
 
 	defer func() { fmt.Println(err) }()
 
-	err = flow.Begin().
-		WithOptions(flow.ConfigString(confStr)).
+	err = flow.Begin(context.NewContext()).
+		WithConfig("lang.javascript.goja", flow.ConfigString(confStr)).
 		Then("lang.javascript.goja").
 		Commit()
 
