@@ -2,11 +2,10 @@ package flow
 
 import (
 	"fmt"
-	"github.com/gogap/config"
 	"sync"
 
+	"github.com/gogap/config"
 	"github.com/gogap/context"
-	"github.com/gogap/flow/cache"
 )
 
 var (
@@ -14,7 +13,6 @@ var (
 )
 
 type Flow struct {
-	cache                 cache.Cache
 	handlers              map[string]HandlerFunc
 	registerdHandlerNames []string
 
@@ -22,11 +20,12 @@ type Flow struct {
 }
 
 type FlowTrans struct {
-	flow    *Flow
-	ctx     context.Context
-	firstFn HandlerFunc
-	err     error
-	conf    config.Configuration
+	flow          *Flow
+	ctx           context.Context
+	firstFn       HandlerFunc
+	err           error
+	conf          config.Configuration
+	defaultParams Params
 }
 
 func New() *Flow {
@@ -66,11 +65,18 @@ func (p *Flow) ListHandlers() []string {
 	return p.registerdHandlerNames
 }
 
-func (p *Flow) Begin(ctx context.Context) *FlowTrans {
-	return &FlowTrans{flow: p, ctx: ctx}
+func (p *Flow) Begin(ctx context.Context, defaultParams ...Params) *FlowTrans {
+
+	var params Params
+
+	if len(defaultParams) > 0 {
+		params = defaultParams[0]
+	}
+
+	return &FlowTrans{flow: p, ctx: ctx, firstFn: voidTransBegin, defaultParams: params}
 }
 
-func (p *Flow) Run(name string, ctx context.Context) (err error) {
+func (p *Flow) Run(name string, ctx context.Context, params ...Params) (err error) {
 
 	p.lock.RLock()
 	h, exist := p.handlers[name]
@@ -81,7 +87,12 @@ func (p *Flow) Run(name string, ctx context.Context) (err error) {
 		return
 	}
 
-	err = h.Run(ctx)
+	if len(params) > 0 {
+		err = h.Run(ctx, params[0])
+		return
+	}
+
+	err = h.Run(ctx, nil)
 
 	return
 }
@@ -94,41 +105,15 @@ func ListHandlers() []string {
 	return defaultFlow.ListHandlers()
 }
 
-func Run(name string, ctx context.Context) (err error) {
-	return defaultFlow.Run(name, ctx)
+func Run(name string, ctx context.Context, params ...Params) (err error) {
+	return defaultFlow.Run(name, ctx, params...)
 }
 
-func Begin(ctx context.Context) *FlowTrans {
-	return defaultFlow.Begin(ctx)
+func Begin(ctx context.Context, defaultParams ...Params) *FlowTrans {
+	return defaultFlow.Begin(ctx, defaultParams...)
 }
 
-func (p *FlowTrans) WithConfig(name string, opts ...config.Option) *FlowTrans {
-	if p.ctx == nil {
-		p.ctx = context.NewContext()
-	}
-
-	p.ctx.WithValue(ctxConfigKey{name}, config.NewConfig(opts...))
-
-	return p
-}
-
-func (p *FlowTrans) WithCache(name string, opts ...cache.Option) *FlowTrans {
-	if p.ctx == nil {
-		p.ctx = context.NewContext()
-	}
-
-	c, err := cache.NewCache(name, opts...)
-	if err != nil {
-		p.err = err
-		return p
-	}
-
-	p.ctx.WithValue(ctxCacheKey{name}, c)
-
-	return p
-}
-
-func (p *FlowTrans) Then(name string) *FlowTrans {
+func (p *FlowTrans) Then(name string, params ...Params) *FlowTrans {
 
 	if p.err != nil {
 		return p
@@ -141,12 +126,15 @@ func (p *FlowTrans) Then(name string) *FlowTrans {
 		return p
 	}
 
-	if p.firstFn == nil {
-		p.firstFn = h
-		return p
+	var nextParam Params
+
+	if len(params) == 0 {
+		nextParam = p.defaultParams
+	} else {
+		nextParam = params[0]
 	}
 
-	p.firstFn = p.firstFn.Then(h)
+	p.firstFn = p.firstFn.Then(h, nextParam)
 
 	return p
 }
@@ -178,5 +166,9 @@ func (p *FlowTrans) Commit() error {
 		ctx = p.ctx
 	}
 
-	return p.firstFn.Run(ctx)
+	return p.firstFn.Run(ctx, nil)
+}
+
+func voidTransBegin(ctx context.Context, params Params) error {
+	return nil
 }

@@ -10,41 +10,39 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gogap/config"
 	"github.com/gogap/context"
 	"github.com/gogap/flow"
 )
 
-type ctxKey struct{ Key string }
-
 func main() {
 
-	h1 := func(ctx context.Context) (err error) {
+	h1 := func(ctx context.Context, params flow.Params) (err error) {
 
-		v := flow.ValueConfig(ctx, "h1")
-
-		fmt.Println("H1", v)
+		fmt.Println("H1", params.Val("config").(config.Configuration))
 
 		return
 	}
 
-	h2 := func(ctx context.Context) (err error) {
+	h2 := func(ctx context.Context, params flow.Params) (err error) {
 
-		v := flow.ValueConfig(ctx, "h2")
-
-		fmt.Println("H2", v)
+		fmt.Println("H2", params.Val("config").(config.Configuration))
 
 		return
 	}
+
+	h1Config := config.NewConfig(config.ConfigString(`{config = h1}`))
+	h2Config := config.NewConfig(config.ConfigString(`{config = h2}`))
+	defaultConfig := config.NewConfig(config.ConfigString(`{config = default}`))
 
 	flow.RegisterHandler("h1", h1)
 	flow.RegisterHandler("h2", h2)
 
 	ctx := context.NewContext()
 
-	flow.Begin(ctx).
-		WithConfig("h1", flow.ConfigString(`{config = h2}`)).
-		WithConfig("h2", flow.ConfigString(`{config = h2}`)).
-		Then("h1").
+	flow.Begin(ctx, flow.Params{"config": defaultConfig}).
+		Then("h1", flow.Params{"config": h1Config}).
+		Then("h2", flow.Params{"config": h2Config}).
 		Then("h2").
 		Subscribe(
 			func(ctx context.Context) {
@@ -66,43 +64,41 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gogap/config"
 	"github.com/gogap/context"
 	"github.com/gogap/flow"
 )
-
-type ctxKey struct{ Key string }
 
 func main() {
 
 	myFlow := flow.New()
 
-	h1 := func(ctx context.Context) (err error) {
+	h1 := func(ctx context.Context, params flow.Params) (err error) {
 
-		v := flow.ValueConfig(ctx, "h1")
-
-		fmt.Println("H1", v)
+		fmt.Println("H1", params.Val("config").(config.Configuration))
 
 		return
 	}
 
-	h2 := func(ctx context.Context) (err error) {
+	h2 := func(ctx context.Context, params flow.Params) (err error) {
 
-		v := flow.ValueConfig(ctx, "h2")
-
-		fmt.Println("H2", v)
+		fmt.Println("H2", params.Val("config").(config.Configuration))
 
 		return
 	}
+
+	h1Config := config.NewConfig(config.ConfigString(`{config = h1}`))
+	h2Config := config.NewConfig(config.ConfigString(`{config = h2}`))
+	defaultConfig := config.NewConfig(config.ConfigString(`{config = default}`))
 
 	myFlow.RegisterHandler("h1", h1)
 	myFlow.RegisterHandler("h2", h2)
 
 	ctx := context.NewContext()
 
-	myFlow.Begin(ctx).
-		WithConfig("h1", flow.ConfigString(`{config = h2}`)).
-		WithConfig("h2", flow.ConfigString(`{config = h2}`)).
-		Then("h1").
+	myFlow.Begin(ctx, flow.Params{"config": defaultConfig}).
+		Then("h1", flow.Params{"config": h1Config}).
+		Then("h2", flow.Params{"config": h2Config}).
 		Then("h2").
 		Subscribe(
 			func(ctx context.Context) {
@@ -119,21 +115,25 @@ func main() {
 
 ```bash
 H1 {
-  a : 1
+  config : h1
 }
 H2 {
-  a : 2
+  config : h2
+}
+H2 {
+  config : default
 }
 subscribed
 ```
 
-#### handler options demo
+#### handler context demo
 
 ```go
 package main
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/gogap/config"
 	"github.com/gogap/context"
@@ -144,7 +144,9 @@ type ctxKey struct{ Key string }
 
 func main() {
 
-	var h1 flow.HandlerFunc = func(ctx context.Context) (err error) {
+	myFlow := flow.New()
+
+	h1 := func(ctx context.Context, params flow.Params) (err error) {
 
 		v := ctx.Value(ctxKey{"H1"}).(config.Configuration)
 
@@ -153,7 +155,7 @@ func main() {
 		return
 	}
 
-	var h2 flow.HandlerFunc = func(ctx context.Context) (err error) {
+	h2 := func(ctx context.Context, params flow.Params) (err error) {
 
 		v := ctx.Value(ctxKey{"H2"}).(config.Configuration)
 
@@ -162,13 +164,27 @@ func main() {
 		return
 	}
 
+	h1Config := config.NewConfig(config.ConfigString(`{config = h1}`))
+	h2Config := config.NewConfig(config.ConfigString(`{config = h2}`))
+
+	myFlow.RegisterHandler("h1", h1)
+	myFlow.RegisterHandler("h2", h2)
+
 	ctx := context.NewContext()
-	ctx.WithValue(ctxKey{"H1"}, config.NewConfig(flow.ConfigString(`{config = h1}`)))
-	ctx.WithValue(ctxKey{"H2"}, config.NewConfig(flow.ConfigString(`{config = h2}`)))
 
-	h := h1.Then(h2)
+	ctx.WithValue(ctxKey{"H1"}, h1Config)
+	ctx.WithValue(ctxKey{"H2"}, h2Config)
 
-	h(ctx)
+	myFlow.Begin(ctx).
+		Then("h1").
+		Then("h2").
+		Subscribe(
+			func(ctx context.Context) {
+				fmt.Println("subscribed")
+			}).Commit()
+
+	// delay exist console
+	time.Sleep(time.Second)
 }
 
 ```
@@ -183,6 +199,7 @@ H1 {
 H2 {
   config : h2
 }
+subscribed
 ```
 
 
@@ -194,23 +211,25 @@ package main
 import (
 	"fmt"
 
+	"github.com/gogap/config"
 	"github.com/gogap/context"
 	"github.com/gogap/flow"
 
 	_ "github.com/gogap/flow-contrib/handler/devops/aliyun"
-	_ "github.com/gogap/flow/cache/redis"
 )
 
 var confStr = `
 aliyun {
 	region = cn-beijing
-	access-key-id = ""
-	access-key-secret = ""
+	access-key-id = ${DEVOPS_ALIYUN_ACCESS_KEY_ID}
+	access-key-secret = ${DEVOPS_ALIYUN_ACCESS_KEY_SECRET}
 
-	vpc  {
-		test {
-			cidr-block  = "172.16.0.0/16"
-			description = "172.16.0.0/16"
+	ecs {
+		vpc  {
+			test {
+				cidr-block  = "172.16.0.0/16"
+				description = "172.16.0.0/16"
+			}
 		}
 	}
 }
@@ -226,16 +245,17 @@ func main() {
 
 	ctx.WithValue("CODE", "test")
 
+	conf := config.NewConfig(config.ConfigString(confStr))
+
 	err = flow.Begin(ctx).
-		WithCache("go-redis").
-		WithConfig("devops.aliyun", flow.ConfigString(confStr)).
-		Then("devops.aliyun.vpc.create").
+		Then("devops.aliyun.ecs.vpc.create", flow.Params{"aliyun.config": conf}).
 		Commit()
 
 	if err != nil {
 		return
 	}
 }
+
 
 ```
 
@@ -247,6 +267,7 @@ package main
 import (
 	"fmt"
 
+	"github.com/gogap/config"
 	"github.com/gogap/context"
 	"github.com/gogap/flow"
 
@@ -261,17 +282,19 @@ func main() {
 
 	var err error
 
+	conf := config.NewConfig(config.ConfigString(confStr))
+
 	defer func() { fmt.Println(err) }()
 
 	err = flow.Begin(context.NewContext()).
-		WithConfig("lang.javascript.goja", flow.ConfigString(confStr)).
-		Then("lang.javascript.goja").
+		Then("lang.javascript.goja", flow.Params{"goja.config": conf}).
 		Commit()
 
 	if err != nil {
 		return
 	}
 }
+
 ```
 
 `test.js`
