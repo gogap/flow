@@ -203,7 +203,7 @@ import (
 	"github.com/gogap/context"
 	"github.com/gogap/flow"
 
-	_ "github.com/gogap/flow-contrib/handler/devops/aliyun"
+	_ "github.com/flow-contrib/aliyun"
 )
 
 var confStr = `
@@ -255,7 +255,7 @@ import (
 	"github.com/gogap/context"
 	"github.com/gogap/flow"
 
-	_ "github.com/gogap/flow-contrib/handler/lang/javascript/goja"
+	_ "github.com/flow-contrib/goja"
 )
 
 var confStr = `
@@ -276,7 +276,6 @@ func main() {
 		return
 	}
 }
-
 
 ```
 
