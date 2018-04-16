@@ -20,12 +20,11 @@ type Flow struct {
 }
 
 type FlowTrans struct {
-	flow          *Flow
-	ctx           context.Context
-	firstFn       HandlerFunc
-	err           error
-	conf          config.Configuration
-	defaultParams Params
+	flow    *Flow
+	ctx     context.Context
+	firstFn HandlerFunc
+	err     error
+	conf    config.Configuration
 }
 
 func New() *Flow {
@@ -65,18 +64,16 @@ func (p *Flow) ListHandlers() []string {
 	return p.registerdHandlerNames
 }
 
-func (p *Flow) Begin(ctx context.Context, defaultParams ...Params) *FlowTrans {
-
-	var params Params
-
-	if len(defaultParams) > 0 {
-		params = defaultParams[0]
+func (p *Flow) Begin(ctx context.Context, opts ...config.Option) *FlowTrans {
+	return &FlowTrans{
+		flow:    p,
+		ctx:     ctx,
+		firstFn: voidTransBegin,
+		conf:    config.NewConfig(opts...),
 	}
-
-	return &FlowTrans{flow: p, ctx: ctx, firstFn: voidTransBegin, defaultParams: params}
 }
 
-func (p *Flow) Run(name string, ctx context.Context, params ...Params) (err error) {
+func (p *Flow) Run(name string, ctx context.Context, opts ...config.Option) (err error) {
 
 	p.lock.RLock()
 	h, exist := p.handlers[name]
@@ -87,12 +84,9 @@ func (p *Flow) Run(name string, ctx context.Context, params ...Params) (err erro
 		return
 	}
 
-	if len(params) > 0 {
-		err = h.Run(ctx, params[0])
-		return
-	}
+	conf := config.NewConfig(opts...)
 
-	err = h.Run(ctx, nil)
+	err = h.Run(ctx, conf)
 
 	return
 }
@@ -105,15 +99,15 @@ func ListHandlers() []string {
 	return defaultFlow.ListHandlers()
 }
 
-func Run(name string, ctx context.Context, params ...Params) (err error) {
-	return defaultFlow.Run(name, ctx, params...)
+func Run(name string, ctx context.Context, opts ...config.Option) (err error) {
+	return defaultFlow.Run(name, ctx, opts...)
 }
 
-func Begin(ctx context.Context, defaultParams ...Params) *FlowTrans {
-	return defaultFlow.Begin(ctx, defaultParams...)
+func Begin(ctx context.Context, opts ...config.Option) *FlowTrans {
+	return defaultFlow.Begin(ctx, opts...)
 }
 
-func (p *FlowTrans) Then(name string, params ...Params) *FlowTrans {
+func (p *FlowTrans) Then(name string, opts ...config.Option) *FlowTrans {
 
 	if p.err != nil {
 		return p
@@ -126,15 +120,15 @@ func (p *FlowTrans) Then(name string, params ...Params) *FlowTrans {
 		return p
 	}
 
-	var nextParam Params
+	var nextConf config.Configuration
 
-	if len(params) == 0 {
-		nextParam = p.defaultParams
+	if len(opts) == 0 {
+		nextConf = p.conf
 	} else {
-		nextParam = params[0]
+		nextConf = config.NewConfig(opts...)
 	}
 
-	p.firstFn = p.firstFn.Then(h, nextParam)
+	p.firstFn = p.firstFn.Then(h, nextConf)
 
 	return p
 }
@@ -169,6 +163,6 @@ func (p *FlowTrans) Commit() error {
 	return p.firstFn.Run(ctx, nil)
 }
 
-func voidTransBegin(ctx context.Context, params Params) error {
+func voidTransBegin(ctx context.Context, conf config.Configuration) error {
 	return nil
 }

@@ -4,6 +4,7 @@ Flow
 #### usage demo
 
 ```go
+
 package main
 
 import (
@@ -15,35 +16,41 @@ import (
 	"github.com/gogap/flow"
 )
 
+type ctxKey struct{ Key string }
+
 func main() {
 
-	h1 := func(ctx context.Context, params flow.Params) (err error) {
+	h1 := func(ctx context.Context, conf config.Configuration) (err error) {
 
-		fmt.Println("H1", params.Val("config").(config.Configuration))
-
-		return
-	}
-
-	h2 := func(ctx context.Context, params flow.Params) (err error) {
-
-		fmt.Println("H2", params.Val("config").(config.Configuration))
+		fmt.Println("H1", conf)
 
 		return
 	}
 
-	h1Config := config.NewConfig(config.ConfigString(`{config = h1}`))
-	h2Config := config.NewConfig(config.ConfigString(`{config = h2}`))
-	defaultConfig := config.NewConfig(config.ConfigString(`{config = default}`))
+	h2 := func(ctx context.Context, conf config.Configuration) (err error) {
+
+		fmt.Println("H2", conf)
+
+		return
+	}
+
+	h3 := func(ctx context.Context, conf config.Configuration) (err error) {
+
+		fmt.Println("H3", conf)
+
+		return
+	}
 
 	flow.RegisterHandler("h1", h1)
 	flow.RegisterHandler("h2", h2)
+	flow.RegisterHandler("h3", h3)
 
 	ctx := context.NewContext()
 
-	flow.Begin(ctx, flow.Params{"config": defaultConfig}).
-		Then("h1", flow.Params{"config": h1Config}).
-		Then("h2", flow.Params{"config": h2Config}).
-		Then("h2").
+	flow.Begin(ctx, config.ConfigString(`{config = default}`)).
+		Then("h1", config.ConfigString(`{config = h1}`)).
+		Then("h2", config.ConfigString(`{config = h2}`)).
+		Then("h3").
 		Subscribe(
 			func(ctx context.Context) {
 				fmt.Println("subscribed")
@@ -53,9 +60,10 @@ func main() {
 	time.Sleep(time.Second)
 }
 
+
 ```
 
-or
+or you could define a Flow instance
 
 ```go
 package main
@@ -69,37 +77,43 @@ import (
 	"github.com/gogap/flow"
 )
 
+type ctxKey struct{ Key string }
+
 func main() {
 
 	myFlow := flow.New()
 
-	h1 := func(ctx context.Context, params flow.Params) (err error) {
+	h1 := func(ctx context.Context, conf config.Configuration) (err error) {
 
-		fmt.Println("H1", params.Val("config").(config.Configuration))
-
-		return
-	}
-
-	h2 := func(ctx context.Context, params flow.Params) (err error) {
-
-		fmt.Println("H2", params.Val("config").(config.Configuration))
+		fmt.Println("H1", conf)
 
 		return
 	}
 
-	h1Config := config.NewConfig(config.ConfigString(`{config = h1}`))
-	h2Config := config.NewConfig(config.ConfigString(`{config = h2}`))
-	defaultConfig := config.NewConfig(config.ConfigString(`{config = default}`))
+	h2 := func(ctx context.Context, conf config.Configuration) (err error) {
+
+		fmt.Println("H2", conf)
+
+		return
+	}
+
+	h3 := func(ctx context.Context, conf config.Configuration) (err error) {
+
+		fmt.Println("H3", conf)
+
+		return
+	}
 
 	myFlow.RegisterHandler("h1", h1)
 	myFlow.RegisterHandler("h2", h2)
+	myFlow.RegisterHandler("h3", h3)
 
 	ctx := context.NewContext()
 
-	myFlow.Begin(ctx, flow.Params{"config": defaultConfig}).
-		Then("h1", flow.Params{"config": h1Config}).
-		Then("h2", flow.Params{"config": h2Config}).
-		Then("h2").
+	myFlow.Begin(ctx, config.ConfigString(`{config = default}`)).
+		Then("h1", config.ConfigString(`{config = h1}`)).
+		Then("h2", config.ConfigString(`{config = h2}`)).
+		Then("h3").
 		Subscribe(
 			func(ctx context.Context) {
 				fmt.Println("subscribed")
@@ -108,6 +122,7 @@ func main() {
 	// delay exist console
 	time.Sleep(time.Second)
 }
+
 
 ```
 
@@ -120,7 +135,7 @@ H1 {
 H2 {
   config : h2
 }
-H2 {
+H3 {
   config : default
 }
 subscribed
@@ -144,62 +159,35 @@ type ctxKey struct{ Key string }
 
 func main() {
 
-	myFlow := flow.New()
+	h1 := func(ctx context.Context, conf config.Configuration) (err error) {
 
-	h1 := func(ctx context.Context, params flow.Params) (err error) {
+		t := ctx.Value(ctxKey{"key1"}).(time.Time)
 
-		v := ctx.Value(ctxKey{"H1"}).(config.Configuration)
-
-		fmt.Println("H1", v)
+		fmt.Println("key1", t)
 
 		return
 	}
 
-	h2 := func(ctx context.Context, params flow.Params) (err error) {
-
-		v := ctx.Value(ctxKey{"H2"}).(config.Configuration)
-
-		fmt.Println("H2", v)
-
-		return
-	}
-
-	h1Config := config.NewConfig(config.ConfigString(`{config = h1}`))
-	h2Config := config.NewConfig(config.ConfigString(`{config = h2}`))
-
-	myFlow.RegisterHandler("h1", h1)
-	myFlow.RegisterHandler("h2", h2)
+	flow.RegisterHandler("h1", h1)
 
 	ctx := context.NewContext()
 
-	ctx.WithValue(ctxKey{"H1"}, h1Config)
-	ctx.WithValue(ctxKey{"H2"}, h2Config)
+	ctx.WithValue(ctxKey{"key1"}, time.Now())
 
-	myFlow.Begin(ctx).
-		Then("h1").
-		Then("h2").
-		Subscribe(
-			func(ctx context.Context) {
-				fmt.Println("subscribed")
-			}).Commit()
+	flow.Begin(ctx).
+		Then("h1", config.ConfigString(`{config = h1}`)).
+		Commit()
 
 	// delay exist console
 	time.Sleep(time.Second)
 }
-
 ```
 
 
 **output**
 
 ```bash
-H1 {
-  config : h1
-}
-H2 {
-  config : h2
-}
-subscribed
+key1 2018-04-16 20:51:03.220143 +0800 CST m=+0.000465875
 ```
 
 
@@ -245,18 +233,14 @@ func main() {
 
 	ctx.WithValue("CODE", "test")
 
-	conf := config.NewConfig(config.ConfigString(confStr))
-
 	err = flow.Begin(ctx).
-		Then("devops.aliyun.ecs.vpc.create", flow.Params{"aliyun.config": conf}).
+		Then("devops.aliyun.ecs.vpc.create", config.ConfigString(confStr)).
 		Commit()
 
 	if err != nil {
 		return
 	}
 }
-
-
 ```
 
 #### execute js
@@ -282,18 +266,17 @@ func main() {
 
 	var err error
 
-	conf := config.NewConfig(config.ConfigString(confStr))
-
 	defer func() { fmt.Println(err) }()
 
 	err = flow.Begin(context.NewContext()).
-		Then("lang.javascript.goja", flow.Params{"goja.config": conf}).
+		Then("lang.javascript.goja", config.ConfigString(confStr)).
 		Commit()
 
 	if err != nil {
 		return
 	}
 }
+
 
 ```
 
