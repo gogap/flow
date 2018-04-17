@@ -163,6 +163,10 @@ func (p *FlowTrans) Commit() error {
 	return p.firstFn.Run(ctx, nil)
 }
 
+func (p *FlowTrans) Output() *Output {
+	return ListOutput(p.ctx)
+}
+
 func voidTransBegin(ctx context.Context, conf config.Configuration) error {
 	return nil
 }

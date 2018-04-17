@@ -284,3 +284,101 @@ func main() {
 ```javascript
 console.log("I am from goja")
 ```
+
+#### add output and view output
+
+```go
+package main
+
+import (
+	"fmt"
+	"time"
+
+	"github.com/gogap/config"
+	"github.com/gogap/context"
+	"github.com/gogap/flow"
+)
+
+type ctxKey struct{ Key string }
+
+func main() {
+
+	h1 := func(ctx context.Context, conf config.Configuration) (err error) {
+
+		fmt.Println("H1", conf)
+
+		flow.AppendOutput(ctx, "H1", 1)
+
+		return
+	}
+
+	h2 := func(ctx context.Context, conf config.Configuration) (err error) {
+
+		fmt.Println("H2", conf)
+
+		flow.AppendOutput(ctx, "H2", 2)
+
+		return
+	}
+
+	h3 := func(ctx context.Context, conf config.Configuration) (err error) {
+
+		fmt.Println("H3", conf)
+
+		flow.AppendOutput(ctx, "H3", 3)
+		flow.AppendOutput(ctx, "H3", 4)
+
+		return
+	}
+
+	flow.RegisterHandler("h1", h1)
+	flow.RegisterHandler("h2", h2)
+	flow.RegisterHandler("h3", h3)
+
+	ctx := context.NewContext()
+
+	trans := flow.Begin(ctx, config.ConfigString(`{config = default}`))
+
+	trans.Then("h1", config.ConfigString(`{config = h1}`)).
+		Then("h2", config.ConfigString(`{config = h2}`)).
+		Then("h3").
+		Subscribe(
+			func(ctx context.Context) {
+				fmt.Println("subscribed")
+			}).Commit()
+
+	output := trans.Output()
+
+	for output != nil {
+		fmt.Printf("Name: %s, Value: %v\n", output.Name, output.Value)
+		if output.Next != nil {
+			output = output.Next
+			continue
+		}
+
+		return
+	}
+
+	// delay exist console
+	time.Sleep(time.Second)
+}
+
+```
+
+**output**
+
+```bash
+H1 {
+  config : h1
+}
+H2 {
+  config : h2
+}
+H3 {
+  config : default
+}
+Name: H1, Value: 1
+Name: H2, Value: 2
+Name: H3, Value: 3
+Name: H3, Value: 4
+```
