@@ -2,14 +2,59 @@ package flow
 
 import (
 	"github.com/gogap/context"
+	"sync"
 )
 
 type outputKey struct{}
 
+type NameValue struct {
+	Name  string      `json:"name"`
+	Value interface{} `json:"value"`
+}
+
 type Output struct {
-	Name  string
-	Value interface{}
-	Next  *Output
+	item NameValue
+	next *Output
+
+	locker sync.Mutex
+}
+
+func (p *Output) List() []NameValue {
+
+	if p == nil {
+		return nil
+	}
+
+	var nv []NameValue
+
+	output := p
+	for output != nil {
+		nv = append(nv, NameValue{output.item.Name, output.item.Value})
+		if output.next != nil {
+			output = output.next
+			continue
+		}
+		return nv
+	}
+
+	return nil
+}
+
+func (p *Output) Append(name string, value interface{}) {
+
+	p.locker.Lock()
+	defer p.locker.Unlock()
+
+	output := p
+	for output != nil {
+		if output.next != nil {
+			output = output.next
+			continue
+		}
+
+		output.next = &Output{item: NameValue{name, value}}
+		return
+	}
 }
 
 func AppendOutput(ctx context.Context, name string, value interface{}) {
@@ -21,28 +66,20 @@ func AppendOutput(ctx context.Context, name string, value interface{}) {
 	output, ok := ctx.Value(outputKey{}).(*Output)
 
 	if !ok {
-		ctx.WithValue(outputKey{}, &Output{Name: name, Value: value})
+		ctx.WithValue(outputKey{}, &Output{item: NameValue{name, value}})
 		return
 	}
 
 	if output == nil {
-		output = &Output{Name: name, Value: value}
+		output = &Output{item: NameValue{name, value}}
 		ctx.WithValue(outputKey{}, output)
 		return
 	}
 
-	for output != nil {
-		if output.Next != nil {
-			output = output.Next
-			continue
-		}
-
-		output.Next = &Output{Name: name, Value: value}
-		return
-	}
+	output.Append(name, value)
 }
 
-func ListOutput(ctx context.Context) *Output {
+func ListOutput(ctx context.Context) []NameValue {
 	if ctx == nil {
 		return nil
 	}
@@ -53,5 +90,5 @@ func ListOutput(ctx context.Context) *Output {
 		return nil
 	}
 
-	return output
+	return output.List()
 }

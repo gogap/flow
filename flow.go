@@ -163,7 +163,7 @@ func (p *FlowTrans) Commit() error {
 	return p.firstFn.Run(ctx, nil)
 }
 
-func (p *FlowTrans) Output() *Output {
+func (p *FlowTrans) Output() []NameValue {
 	return ListOutput(p.ctx)
 }
 

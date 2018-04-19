@@ -291,6 +291,7 @@ console.log("I am from goja")
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -349,20 +350,12 @@ func main() {
 
 	output := trans.Output()
 
-	for output != nil {
-		fmt.Printf("Name: %s, Value: %v\n", output.Name, output.Value)
-		if output.Next != nil {
-			output = output.Next
-			continue
-		}
-
-		return
-	}
+	outdata, _ := json.MarshalIndent(output, "", "    ")
+	fmt.Println(string(outdata))
 
 	// delay exist console
 	time.Sleep(time.Second)
 }
-
 ```
 
 **output**
@@ -377,8 +370,23 @@ H2 {
 H3 {
   config : default
 }
-Name: H1, Value: 1
-Name: H2, Value: 2
-Name: H3, Value: 3
-Name: H3, Value: 4
+subscribed
+[
+    {
+        "name": "H1",
+        "value": 1
+    },
+    {
+        "name": "H2",
+        "value": 2
+    },
+    {
+        "name": "H3",
+        "value": 3
+    },
+    {
+        "name": "H3",
+        "value": 4
+    }
+]
 ```
