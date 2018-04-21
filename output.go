@@ -10,6 +10,7 @@ type outputKey struct{}
 type NameValue struct {
 	Name  string      `json:"name"`
 	Value interface{} `json:"value"`
+	Tags  []string    `json:"tags"`
 }
 
 type Output struct {
@@ -29,7 +30,7 @@ func (p *Output) List() []NameValue {
 
 	output := p
 	for output != nil {
-		nv = append(nv, NameValue{output.item.Name, output.item.Value})
+		nv = append(nv, NameValue{output.item.Name, output.item.Value, output.item.Tags})
 		if output.next != nil {
 			output = output.next
 			continue
@@ -40,7 +41,7 @@ func (p *Output) List() []NameValue {
 	return nil
 }
 
-func (p *Output) Append(name string, value interface{}) {
+func (p *Output) Append(name string, value interface{}, tags []string) {
 
 	p.locker.Lock()
 	defer p.locker.Unlock()
@@ -52,12 +53,12 @@ func (p *Output) Append(name string, value interface{}) {
 			continue
 		}
 
-		output.next = &Output{item: NameValue{name, value}}
+		output.next = &Output{item: NameValue{name, value, tags}}
 		return
 	}
 }
 
-func AppendOutput(ctx context.Context, name string, value interface{}) {
+func AppendOutput(ctx context.Context, name string, value interface{}, tags ...string) {
 
 	if ctx == nil {
 		return
@@ -66,17 +67,17 @@ func AppendOutput(ctx context.Context, name string, value interface{}) {
 	output, ok := ctx.Value(outputKey{}).(*Output)
 
 	if !ok {
-		ctx.WithValue(outputKey{}, &Output{item: NameValue{name, value}})
+		ctx.WithValue(outputKey{}, &Output{item: NameValue{name, value, tags}})
 		return
 	}
 
 	if output == nil {
-		output = &Output{item: NameValue{name, value}}
+		output = &Output{item: NameValue{name, value, tags}}
 		ctx.WithValue(outputKey{}, output)
 		return
 	}
 
-	output.Append(name, value)
+	output.Append(name, value, tags)
 }
 
 func ListOutput(ctx context.Context) []NameValue {
