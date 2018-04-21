@@ -10,7 +10,7 @@ type outputKey struct{}
 type NameValue struct {
 	Name  string      `json:"name"`
 	Value interface{} `json:"value"`
-	Tags  []string    `json:"tags"`
+	Tags  []string    `json:"tags,omitempty"`
 }
 
 type Output struct {
