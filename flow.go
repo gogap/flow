@@ -2,6 +2,7 @@ package flow
 
 import (
 	"fmt"
+	"github.com/sirupsen/logrus"
 	"sync"
 
 	"github.com/gogap/config"
@@ -65,11 +66,12 @@ func (p *Flow) ListHandlers() []string {
 }
 
 func (p *Flow) Begin(ctx context.Context, opts ...config.Option) *FlowTrans {
+	conf := config.NewConfig(opts...)
 	return &FlowTrans{
 		flow:    p,
 		ctx:     ctx,
 		firstFn: voidTransBegin,
-		conf:    config.NewConfig(opts...),
+		conf:    conf,
 	}
 }
 
@@ -120,17 +122,26 @@ func (p *FlowTrans) Then(name string, opts ...config.Option) *FlowTrans {
 		return p
 	}
 
-	var nextConf config.Configuration
-
-	if len(opts) == 0 {
-		nextConf = p.conf
-	} else {
-		nextConf = config.NewConfig(opts...)
-	}
-
-	p.firstFn = p.firstFn.Then(h, nextConf)
+	p.firstFn = p.firstFn.Then(handlerHook(name, h, opts...), p.conf)
 
 	return p
+}
+
+func handlerHook(name string, fn HandlerFunc, opts ...config.Option) HandlerFunc {
+	return func(ctx context.Context, conf config.Configuration) error {
+		var nextConf config.Configuration
+		if len(opts) == 0 {
+			nextConf = conf
+		} else {
+			nextConf = config.NewConfig(opts...)
+			logrus.WithField("name", name).Debugln("Config loaded")
+		}
+
+		logrus.WithField("name", name).Debugln("Before execute")
+		err := fn(ctx, nextConf)
+		logrus.WithField("name", name).Debugln("After execute")
+		return err
+	}
 }
 
 func (p *FlowTrans) Subscribe(subscribers ...SubscriberFunc) *FlowTrans {
