@@ -308,7 +308,7 @@ func main() {
 
 		fmt.Println("H1", conf)
 
-		flow.AppendOutput(ctx, "H1", 1)
+		flow.AppendOutput(ctx, flow.NameValue{Name: "H1", Value: 1})
 
 		return
 	}
@@ -317,7 +317,7 @@ func main() {
 
 		fmt.Println("H2", conf)
 
-		flow.AppendOutput(ctx, "H2", 2)
+		flow.AppendOutput(ctx, flow.NameValue{Name: "H2", Value: 2})
 
 		return
 	}
@@ -326,8 +326,10 @@ func main() {
 
 		fmt.Println("H3", conf)
 
-		flow.AppendOutput(ctx, "H3", 3)
-		flow.AppendOutput(ctx, "H3", 4)
+		flow.AppendOutput(ctx,
+			flow.NameValue{Name: "H3", Value: 3},
+			flow.NameValue{Name: "H3", Value: 4},
+		)
 
 		return
 	}
