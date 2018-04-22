@@ -41,7 +41,7 @@ func (p *Output) List() []NameValue {
 	return nil
 }
 
-func (p *Output) Append(name string, value interface{}, tags []string) {
+func (p *Output) Append(items ...NameValue) {
 
 	p.locker.Lock()
 	defer p.locker.Unlock()
@@ -53,12 +53,16 @@ func (p *Output) Append(name string, value interface{}, tags []string) {
 			continue
 		}
 
-		output.next = &Output{item: NameValue{name, value, tags}}
+		for _, item := range items {
+			output.next = &Output{item: item}
+			output = output.next
+		}
+
 		return
 	}
 }
 
-func AppendOutput(ctx context.Context, name string, value interface{}, tags ...string) {
+func AppendOutput(ctx context.Context, items ...NameValue) {
 
 	if ctx == nil {
 		return
@@ -66,18 +70,14 @@ func AppendOutput(ctx context.Context, name string, value interface{}, tags ...s
 
 	output, ok := ctx.Value(outputKey{}).(*Output)
 
-	if !ok {
-		ctx.WithValue(outputKey{}, &Output{item: NameValue{name, value, tags}})
+	if !ok || output == nil {
+		output = &Output{}
+		output.Append(items...)
+		ctx.WithValue(outputKey{}, output.next)
 		return
 	}
 
-	if output == nil {
-		output = &Output{item: NameValue{name, value, tags}}
-		ctx.WithValue(outputKey{}, output)
-		return
-	}
-
-	output.Append(name, value, tags)
+	output.Append(items...)
 }
 
 func ListOutput(ctx context.Context) []NameValue {
