@@ -1,16 +1,18 @@
 package flow
 
 import (
-	"github.com/gogap/context"
+	"encoding/json"
 	"sync"
+
+	"github.com/gogap/context"
 )
 
 type outputKey struct{}
 
 type NameValue struct {
-	Name  string      `json:"name"`
-	Value interface{} `json:"value"`
-	Tags  []string    `json:"tags,omitempty"`
+	Name  string          `json:"name"`
+	Value json.RawMessage `json:"value"`
+	Tags  []string        `json:"tags,omitempty"`
 }
 
 type Output struct {
@@ -92,4 +94,41 @@ func ListOutput(ctx context.Context) []NameValue {
 	}
 
 	return output.List()
+}
+
+func FindOutput(ctx context.Context, name string, tags ...string) []NameValue {
+	outputList := ListOutput(ctx)
+
+	var matched []NameValue
+
+	for i := 0; i < len(outputList); i++ {
+		if name != outputList[i].Name {
+			continue
+		}
+
+		if !isTagsMatched(tags, outputList[i].Tags) {
+			continue
+		}
+
+		matched = append(matched, outputList[i])
+	}
+
+	return matched
+}
+
+func isTagsMatched(tagsA []string, tagsB []string) bool {
+	mapTagsB := map[string]bool{}
+	for i := 0; i < len(tagsB); i++ {
+		mapTagsB[tagsB[i]] = true
+	}
+
+	matched := 0
+
+	for i := 0; i < len(tagsA); i++ {
+		if mapTagsB[tagsA[i]] == true {
+			matched++
+		}
+	}
+
+	return matched == len(tagsA)
 }
