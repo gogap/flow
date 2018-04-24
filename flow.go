@@ -2,11 +2,11 @@ package flow
 
 import (
 	"fmt"
-	"github.com/sirupsen/logrus"
 	"sync"
 
 	"github.com/gogap/config"
 	"github.com/gogap/context"
+	"github.com/sirupsen/logrus"
 )
 
 var (
